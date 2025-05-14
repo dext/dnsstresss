@@ -68,7 +68,7 @@ func main() {
 	parsedResolver, err := ParseIPPort(resolver)
 	resolver = parsedResolver
 	if err != nil {
-		fmt.Println(aurora.Sprintf(aurora.Red("%s (%s)"), "Unable to parse the resolver address", err))
+		fmt.Println(aurora.Sprintf(aurora.Red("%s (%v)"), "Unable to parse the resolver address", err))
 		os.Exit(2)
 	}
 
@@ -165,7 +165,7 @@ func linearResolver(threadID int, domain string, sentCounterCh chan<- statsMessa
 				}
 				if err != nil {
 					if verbose {
-						fmt.Printf("%s error: %d (%s)\n", domain, err, resolver)
+						fmt.Printf("%s error: %v (%s)\n", domain, err, resolver)
 					}
 					errors++
 				}
