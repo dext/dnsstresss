@@ -23,6 +23,7 @@ var (
 	resolver        string
 	randomIds       bool
 	flood           bool
+	timeout         int
 )
 
 func init() {
@@ -40,6 +41,7 @@ func init() {
 		"Resolver to test against")
 	flag.BoolVar(&flood, "f", false,
 		"Don't wait for an answer before sending another")
+	flag.IntVar(&timeout, "timeout", 5, "Timeout for each DNS request in seconds (default 5)")
 }
 
 func main() {
@@ -114,7 +116,7 @@ func testRequest(domain string) bool {
 	if iterative {
 		message.RecursionDesired = false
 	}
-	err := dnsExchange(resolver, message)
+	err := dnsExchange(resolver, message, time.Duration(timeout)*time.Second)
 	if err != nil {
 		fmt.Printf("Checking \"%s\" failed: %+v (using %s)\n", domain, aurora.Red(err), resolver)
 		return true
@@ -152,10 +154,10 @@ func linearResolver(threadID int, domain string, sentCounterCh chan<- statsMessa
 			}
 
 			if flood {
-				go dnsExchange(resolver, message)
+				go dnsExchange(resolver, message, time.Duration(timeout)*time.Second)
 			} else {
 				start = time.Now()
-				err := dnsExchange(resolver, message)
+				err := dnsExchange(resolver, message, time.Duration(timeout)*time.Second)
 				spent := time.Since(start)
 				elapsed += spent
 				if spent > maxElapsed {
@@ -183,18 +185,24 @@ func linearResolver(threadID int, domain string, sentCounterCh chan<- statsMessa
 	}
 }
 
-func dnsExchange(resolver string, message *dns.Msg) error {
+func dnsExchange(resolver string, message *dns.Msg, timeout time.Duration) error {
 	//XXX: How can we share the connection between subsequent attempts ?
-	dnsconn, err := net.Dial("udp", resolver)
+	dnsconn, err := net.DialTimeout("udp", resolver, timeout)
 	if err != nil {
 		return err
 	}
 	co := &dns.Conn{Conn: dnsconn}
 	defer co.Close()
 
-	// Actually send the message and wait for answer
-	co.WriteMsg(message)
+	// Set write deadline and send the message
+	co.SetWriteDeadline(time.Now().Add(timeout))
+	err = co.WriteMsg(message)
+	if err != nil {
+		return err
+	}
 
+	// Set read deadline and wait for response
+	co.SetReadDeadline(time.Now().Add(timeout))
 	_, err = co.ReadMsg()
 	return err
 }
